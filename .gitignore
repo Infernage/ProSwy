@@ -73,3 +73,18 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+# Special files
+# =========================
+
+# Debug and Release folders
+*/debug/
+*/release/
+
+# Custom IDE files
+*.user*
+*.Debug
+*.Release
+
+# Server debugger cache folder
+*/srv/
