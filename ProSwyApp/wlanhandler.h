@@ -50,26 +50,26 @@ public:
 
     /*!
      * \brief Removes the given connection.
-     * \param id The connection ID. Should be the SSID and the MAC address.
+     * \param ssid The connection SSID.
      * \return \code true if the connection was removed successfully, or \code false in otherwise.
      */
-    static bool removeConnection(QString id);
+    static bool removeConnection(QString ssid);
 
     /*!
      * \brief Gets an attribute from a connection profile.
-     * \param id The connection ID. Should be the SSID and the MAC address.
+     * \param ssid The connection SSID.
      * \param attr The attribute to request.
      * \return A QVariant with the value of the attribute.
      */
-    static QVariant getAttributeFor(QString id, QString attr);
+    static QVariant getAttributeFor(QString ssid, QString attr);
 
     /*!
      * \brief Sets an attribute of a connection profile.
-     * \param id The connection ID. Should be the SSID and the MAC address.
+     * \param ssid The connection SSID.
      * \param attr The attribute to set.
      * \param value The value to set.
      */
-    static void setAttributeFor(QString id, QString attr, QVariant value);
+    static void setAttributeFor(QString ssid, QString attr, QVariant value);
 
     /*!
      * \brief Obtains the SSID for the connected network.
@@ -79,17 +79,17 @@ public:
 
     /*!
      * \brief Checks if the connection is currently connected.
-     * \param id The connection ID. Should be the SSID and the MAC address.
+     * \param ssid The connection SSID.
      * \return \code true if the connection is actually connected.
      */
-    static bool isConnectedFor(QString id);
+    static bool isConnectedFor(QString ssid);
 
     /*!
      * \brief Refresh the wlan options for the given connection. \warning The connection
      * MUST be connected. \warning This method can throw exceptions of type integer.
-     * \param id The connection ID. Should be the SSID and the MAC address.
+     * \param ssid The connection SSID.
      */
-    static void refresh(QString id);
+    static void refresh(QString ssid);
 
     /*!
      * \brief Saves all profiles to the disk.
@@ -102,7 +102,7 @@ private:
     explicit HandlerManager();
     ~HandlerManager();
 
-    static void notificationCallback(QString ssid, QString mac);
+    static void notificationCallback(QString ssid);
 
     friend class HandlerData;
 };

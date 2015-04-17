@@ -18,6 +18,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    this->setWindowTitle("ProSwy");
     mainWindow = this;
     ui->widget->setEnabled(false);
     ui->proxyPortEdit->setValidator(new QIntValidator(0, 65535, this));
@@ -106,6 +107,27 @@ bool MainWindow::event(QEvent *event)
         } else if (type == "QStringWidget"){
             QString str = evt->getData().toString();
             ui->listWidget->addItem(str);
+        } else if (type == "Mark"){
+            QString mark = evt->getData().toString();
+            QList<QListWidgetItem *> items = ui->listWidget->findItems(mark, Qt::MatchExactly);
+            if (items.size() > 0){
+                QListWidgetItem *i = items.first();
+                i->setText(i->text() + " - (Connected)");
+                QFont f = i->font();
+                f.setBold(true);
+                f.setItalic(true);
+                i->setFont(f);
+            }
+            items = ui->listWidget->findItems(last + " - (Connected)", Qt::MatchExactly);
+            if (items.size() > 0){
+                QListWidgetItem *i = items.first();
+                i->setText(i->text().replace(" - (Connected)", ""));
+                QFont f = i->font();
+                f.setBold(false);
+                f.setItalic(false);
+                i->setFont(f);
+            }
+            last = mark;
         }
         return true;
     } else return QMainWindow::event(event);

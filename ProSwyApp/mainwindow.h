@@ -154,6 +154,7 @@ private: // Private members
     Ui::MainWindow *ui;
     QSystemTrayIcon *tray;
     QTimer timer;
+    QString last;
 };
 
 #endif // MAINWINDOW_H

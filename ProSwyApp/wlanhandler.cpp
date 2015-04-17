@@ -6,6 +6,7 @@
 #include <QNetworkProxyQuery>
 #include <QSettings>
 #include <QMessageBox>
+#include <QInputDialog>
 
 enum State{
     Not_ready,
@@ -35,7 +36,7 @@ struct WLANProfile{
     qulonglong port = 0;
     QString username = "";
     QString password = "";
-    WLANInfo *info;
+    QString ssid = "";
 };
 
 #ifdef Q_OS_WIN
@@ -53,7 +54,7 @@ struct WLANProfile{
 
 HandlerData *HandlerManager::data = NULL;
 QEvent::Type DataEvent::eType = QEvent::None;
-QMutex HandlerManager::lock;
+QMutex HandlerManager::lock(QMutex::Recursive);
 
 class HandlerData
 {
@@ -80,64 +81,42 @@ public:
         registerHandler();
 
         // Load from persistent storage
-        QSettings settings("Infernage", "ProxySwitcher");
+        QSettings settings("Infernage", "ProSwy");
         int size = settings.value("profilesCreated").toInt();
         settings.beginReadArray("profiles");
         QStringList lst;
+        QString connected;
         for (int i = 0; i < size; ++i) {
             settings.setArrayIndex(i);
             WLANProfile *profile = new WLANProfile;
-            QString mac = settings.value("mac").toString();
-            QString guid = settings.value("guid").toString();
-            QString description = settings.value("description").toString();
-            QString ssid = settings.value("ssid").toString();
-            WLANInfo *persistentInfo = NULL;
-            for (int j = 0; j < chain->size(); ++j) {
-                WLANInfo *info = chain->at(j);
-                if (ssid == info->ssid && guid == info->guid && mac == info->mac){
-                    persistentInfo = new WLANInfo;
-                    persistentInfo->mac = info->mac;
-                    persistentInfo->description = info->description;
-                    persistentInfo->errorCode = info->errorCode;
-                    persistentInfo->errorDescription = info->errorDescription;
-                    persistentInfo->guid = guid;
-                    persistentInfo->ssid = ssid;
-                    persistentInfo->state = info->state;
-                    break;
-                }
-            }
-            if (persistentInfo == NULL){
-                persistentInfo = new WLANInfo;
-                persistentInfo->mac = mac;
-                persistentInfo->description = description;
-                persistentInfo->guid = guid;
-                persistentInfo->ssid = ssid;
-                persistentInfo->state = Disconnected;
-            }
-            profile->info = persistentInfo;
+            profile->ssid = settings.value("ssid").toString();
             profile->proxy = settings.value("proxy").toString();
             profile->port = settings.value("port").toULongLong();
             profile->proxyEnabled = settings.value("active").toBool();
     #ifndef Q_OS_WIN
             // Set username and password using cipher mode
     #endif
-            if (profile->info->state == Connected){
-                try {
-                    refreshOptions(profile);
-                } catch (int e) {
-                    qApp->postEvent(MainWindow::mainWindow, new MessageEvent("Refresh failed",
-                                                                 "Failed to refresh wlan options. Error code: "
-                                                                 + QString::number(e),
-                                                                 QSystemTrayIcon::Warning),
-                                    Qt::HighEventPriority);
-                    qDebug() << "refreshOptions function failed with error code:" << e;
+            for (int j = 0; j < chain->size(); ++j) {
+                if (chain->at(j)->ssid == profile->ssid && chain->at(j)->state == Connected){
+                    try {
+                        connected = profile->ssid;
+                        refreshOptions(profile);
+                    } catch (int e) {
+                        qApp->postEvent(MainWindow::mainWindow, new MessageEvent("Refresh failed",
+                                                                     "Failed to refresh wlan options. Error code: "
+                                                                     + QString::number(e),
+                                                                     QSystemTrayIcon::Warning),
+                                        Qt::HighEventPriority);
+                        qDebug() << "refreshOptions function failed with error code:" << e;
+                    }
                 }
             }
             profiles->append(profile);
-            lst.append(profile->info->ssid + QString(" - ").append(profile->info->mac));
+            lst.append(profile->ssid);
         }
         settings.endArray();
         EventHelper::sendEvent(new DataEvent("QStringList", QVariant::fromValue(lst)));
+        if (!connected.isEmpty()) EventHelper::sendEvent(new DataEvent("Mark", QVariant::fromValue(connected)));
 #endif
     }
 
@@ -154,7 +133,6 @@ public:
             if (profiles->size() > 0){
                 for (int i = 0; i < profiles->size(); ++i) {
                     if (profiles->at(i) != NULL){
-                        if (profiles->at(i)->info != NULL) delete profiles->at(i)->info;
                         delete profiles->at(i);
                     }
                 }
@@ -182,75 +160,54 @@ public:
     bool contains(WLANInfo *i)
     {
         for (int j = 0; j < profiles->size(); ++j) {
-            if (i->ssid == profiles->at(j)->info->ssid
-                    && i->mac == profiles->at(j)->info->mac
-                    && i->guid == profiles->at(j)->info->guid) return true;
+            if (i->ssid == profiles->at(j)->ssid) return true;
         }
         return false;
     }
 
     void addConnection(){
-        bool used = false;
-        for (int i = 0; i < chain->size(); ++i) {
-            WLANInfo *info = chain->at(i);
-            if (info->state == Connected){
-                if (contains(info)){
-                    QMessageBox::critical(MainWindow::mainWindow, "Addig failed",
-                                          "Not posible to add two configurations for the same network!");
-                    return;
-                }
-                if (QMessageBox::question(MainWindow::mainWindow, "Connected network found",
-                                          QString("Add ")
-                                          .append(info->ssid)
-                                          .append(" to the profiles?"),
-                                          QMessageBox::StandardButtons(QMessageBox::Yes | QMessageBox::No),
-                                          QMessageBox::Yes) == QMessageBox::Yes){
-                    WLANProfile *profile = new WLANProfile;
-                    profile->info = new WLANInfo;
-                    profile->info->description = info->description;
-                    profile->info->errorCode = info->errorCode;
-                    profile->info->errorDescription = info->errorDescription;
-                    profile->info->guid = info->guid;
-                    profile->info->mac = info->mac;
-                    profile->info->ssid = info->ssid;
-                    profile->info->state = info->state;
-
-                    QNetworkProxyQuery npq(QUrl("http://www.google.com"));
-                    QList<QNetworkProxy> listOfProxies = QNetworkProxyFactory::systemProxyForQuery(npq);
-                    profile->proxyEnabled = listOfProxies.at(0).type() != QNetworkProxy::NoProxy;
-                    if (profile->proxyEnabled){
-                        profile->port = listOfProxies.at(0).port();
-                        profile->proxy = listOfProxies.at(0).hostName();
-                    }
-                    profile->username = listOfProxies.at(0).user();
-                    profile->password = listOfProxies.at(0).password();
-                    profiles->append(profile);
-                    EventHelper::sendEvent(new DataEvent("QStringWidget", QVariant::fromValue(info->ssid
-                                                                 + QString(" - ").append(info->mac))));
-                    used = true;
-                    break;
+        QString ssid = HandlerManager::getSSIDConnected();
+        bool ok = true;
+        do{
+            ssid = QInputDialog::getText(MainWindow::mainWindow, "Adding network",
+                                         "Add the SSID of the network to connect", QLineEdit::Normal, ssid);
+            if (ssid.isNull() || ssid.isEmpty()) return;
+            ok = true;
+            for (int i = 0; i < profiles->size(); ++i) {
+                if (ssid == profiles->at(i)->ssid){
+                    QMessageBox::critical(MainWindow::mainWindow, "Adding failed",
+                                          "Not possible to add two configurations for the same SSID!");
+                    ok = false;
                 }
             }
+        } while(!ok);
+
+        WLANProfile *profile = new WLANProfile;
+        profile->ssid = ssid;
+
+        QNetworkProxyQuery npq(QUrl("http://www.google.com"));
+        QList<QNetworkProxy> proxies = QNetworkProxyFactory::systemProxyForQuery(npq);
+        profile->proxyEnabled = proxies.at(0).type() != QNetworkProxy::NoProxy;
+        if (profile->proxyEnabled){
+            profile->port = proxies.at(0).port();
+            profile->proxy = proxies.at(0).hostName();
         }
-        if (!used){
-            QMessageBox::critical(MainWindow::mainWindow, "Adding failed", "No compatible connected network found!");
-        } else{
-            store();
-        }
+        profile->username = proxies.at(0).user();
+        profile->password = proxies.at(0).password();
+        profiles->append(profile);
+        EventHelper::sendEvent(new DataEvent("QStringWidget", QVariant::fromValue(ssid)));
+        store();
+        if (HandlerManager::isConnectedFor(ssid)) EventHelper::sendEvent(new DataEvent("Mark", QVariant::fromValue(ssid)));
     }
 
     void store(){
-        QSettings settings("Infernage", "ProxySwitcher");
+        QSettings settings("Infernage", "ProSwy");
         settings.setValue("profilesCreated", profiles->size());
         settings.beginWriteArray("profiles");
         for (int i = 0; i < profiles->size(); ++i) {
             settings.setArrayIndex(i);
             WLANProfile *profile = profiles->at(i);
-            WLANInfo *info = profile->info;
-            settings.setValue("mac", info->mac);
-            settings.setValue("guid", info->guid);
-            settings.setValue("description", info->description);
-            settings.setValue("ssid", info->ssid);
+            settings.setValue("ssid", profile->ssid);
             settings.setValue("proxy", profile->proxy);
             settings.setValue("port", profile->port);
             settings.setValue("active", profile->proxyEnabled);
@@ -380,22 +337,6 @@ private:
             }
         }
 
-        for (int i = 0; i < profiles->size(); ++i) {
-            WLANInfo *proInfo = profiles->at(i)->info;
-            for (int j = 0; j < chain->size(); ++j) {
-                WLANInfo *info = chain->at(j);
-                if (proInfo->ssid == info->ssid && proInfo->mac == info->mac){
-                    proInfo->description = info->description;
-                    proInfo->errorCode = info->errorCode;
-                    proInfo->errorDescription = info->errorDescription;
-                    proInfo->guid = info->guid;
-                    proInfo->mac = info->mac;
-                    proInfo->ssid = info->ssid;
-                    proInfo->state = info->state;
-                }
-            }
-        }
-
         if (list != NULL) {
             WlanFreeMemory(list);
         }
@@ -502,13 +443,8 @@ private:
                 for (unsigned int j = 0; j < nData->dot11Ssid.uSSIDLength; ++j) {
                     ssid.append(nData->dot11Ssid.ucSSID[j]);
                 }
-                QString mac;
-                for (int j = 0; j < sizeof (nData->dot11MacAddr); ++j) {
-                    if (j == 5) mac.append(QString("%1").arg(nData->dot11MacAddr[j], 2, 16, QChar('0')).toUpper());
-                    else mac.append(QString("%1-").arg(nData->dot11MacAddr[j], 2, 16, QChar('0')).toUpper());
-                }
                 try {
-                    HandlerManager::notificationCallback(ssid, mac);
+                    HandlerManager::notificationCallback(ssid);
                 } catch (QString s) {
                     qDebug() << "Exception catched:" << s;
                     EventHelper::sendEvent(new MessageEvent("Notification callback failed!",
@@ -582,12 +518,12 @@ void HandlerManager::addConnection()
     data->addConnection();
 }
 
-bool HandlerManager::removeConnection(QString id)
+bool HandlerManager::removeConnection(QString ssid)
 {
     QMutexLocker lck(&lock);
     if (!data) return false;
     for (int i = 0; i < data->profiles->size(); ++i) {
-        if (QString("%1 - %2").arg(data->profiles->at(i)->info->ssid, data->profiles->at(i)->info->mac) == id){
+        if (data->profiles->at(i)->ssid == ssid){
             WLANProfile *profile = data->profiles->takeAt(i);
             delete profile;
             return true;
@@ -596,15 +532,13 @@ bool HandlerManager::removeConnection(QString id)
     return false;
 }
 
-QVariant HandlerManager::getAttributeFor(QString id, QString attr)
+QVariant HandlerManager::getAttributeFor(QString ssid, QString attr)
 {
     QMutexLocker lck(&lock);
     QVariant res;
     if (!data) return res;
-    QString ssid = id.split(" - ").at(0), mac = id.split(" - ").at(1);
     for (int i = 0; i < data->profiles->size(); ++i) {
-        WLANInfo *inf = data->profiles->at(i)->info;
-        if (inf->ssid == ssid && inf->mac == mac){
+        if (data->profiles->at(i)->ssid == ssid){
             WLANProfile *pro = data->profiles->at(i);
             if (attr == "ProxyEnabled"){
                 res.setValue(pro->proxyEnabled);
@@ -617,7 +551,7 @@ QVariant HandlerManager::getAttributeFor(QString id, QString attr)
             } else if (attr == "Password"){
                 res.setValue(pro->password);
             } else if (attr == "SSID"){
-                res.setValue(inf->ssid);
+                res.setValue(data->profiles->at(i)->ssid);
             }
             return res;
         }
@@ -625,14 +559,12 @@ QVariant HandlerManager::getAttributeFor(QString id, QString attr)
     return res;
 }
 
-void HandlerManager::setAttributeFor(QString id, QString attr, QVariant value)
+void HandlerManager::setAttributeFor(QString ssid, QString attr, QVariant value)
 {
     QMutexLocker lck(&lock);
     if (!data) return;
-    QString ssid = id.split(" - ").at(0), mac = id.split(" - ").at(1);
     for (int i = 0; i < data->profiles->size(); ++i) {
-        WLANInfo *inf = data->profiles->at(i)->info;
-        if (inf->ssid == ssid && inf->mac == mac){
+        if (data->profiles->at(i)->ssid == ssid){
             WLANProfile *pro = data->profiles->at(i);
             if (attr == "ProxyEnabled"){
                 pro->proxyEnabled = value.toBool();
@@ -662,29 +594,18 @@ QString HandlerManager::getSSIDConnected()
     return "";
 }
 
-bool HandlerManager::isConnectedFor(QString id)
+bool HandlerManager::isConnectedFor(QString ssid)
 {
-    QMutexLocker lck(&lock);
-    if (!data) return false;
-    QString ssid = id.split(" - ").at(0), mac = id.split(" - ").at(1);
-    for (int i = 0; i < data->profiles->size(); ++i) {
-        WLANInfo *inf = data->profiles->at(i)->info;
-        if (inf->ssid == ssid && inf->mac == mac){
-            return inf->state == Connected;
-        }
-    }
-    return false;
+    return ssid == getSSIDConnected();
 }
 
-void HandlerManager::refresh(QString id)
+void HandlerManager::refresh(QString ssid)
 {
-    if (!isConnectedFor(id)) return;
+    if (!isConnectedFor(ssid)) return;
     QMutexLocker lck(&lock);
     if (!data) return;
-    QString ssid = id.split(" - ").at(0), mac = id.split(" - ").at(1);
     for (int i = 0; i < data->profiles->size(); ++i) {
-        WLANInfo *inf = data->profiles->at(i)->info;
-        if (inf->ssid == ssid && inf->mac == mac){
+        if (data->profiles->at(i)->ssid == ssid){
             data->refresh(data->profiles->at(i));
             return;
         }
@@ -704,7 +625,7 @@ HandlerManager::HandlerManager()
 HandlerManager::~HandlerManager()
 {}
 
-void HandlerManager::notificationCallback(QString ssid, QString mac)
+void HandlerManager::notificationCallback(QString ssid)
 {
     QMutexLocker lck(&lock);
     if (!data){
@@ -713,7 +634,8 @@ void HandlerManager::notificationCallback(QString ssid, QString mac)
     data->refreshHandlerData();
     for (int i = 0; i < data->profiles->size(); ++i) {
         WLANProfile *pro = data->profiles->at(i);
-        if (pro->info->ssid == ssid && pro->info->mac == mac){
+        if (pro->ssid == ssid){
+            EventHelper::sendEvent(new DataEvent("Mark", QVariant::fromValue(ssid)));
             // Network changed, apply profile stored.
             QNetworkProxyQuery npq(QUrl("http://www.google.com"));
             QList<QNetworkProxy> proxies = QNetworkProxyFactory::systemProxyForQuery(npq);
@@ -732,7 +654,7 @@ void HandlerManager::notificationCallback(QString ssid, QString mac)
                 data->refresh(pro);
                 qApp->postEvent(MainWindow::mainWindow, new MessageEvent("Profile changed",
                                                              QString("The network has changed, applied stored profile ")
-                                                             + pro->info->ssid), Qt::HighEventPriority);
+                                                             + pro->ssid), Qt::HighEventPriority);
             } catch (int e) {
                 qApp->postEvent(MainWindow::mainWindow, new MessageEvent("Refresh failed",
                                                              "Failed to refresh wlan options. Error code: "
