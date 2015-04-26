@@ -72,5 +72,6 @@ int main(int argc, char *argv[])
                               "WLAN handler initialization failed: " + e);
         return 1;
     }
+    QObject::connect(&a, &QCoreApplication::aboutToQuit, &HandlerManager::release);
     return a.exec();
 }

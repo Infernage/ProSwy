@@ -80,11 +80,14 @@ $RECYCLE.BIN/
 # Debug and Release folders
 */debug/
 */release/
+build_debug/
+build_release/
 
 # Custom IDE files
 *.user*
 *.Debug
 *.Release
+*ui_*
 
 # Server debugger cache folder
 */srv/

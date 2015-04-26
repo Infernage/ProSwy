@@ -50,6 +50,11 @@ private:
     QSystemTrayIcon::MessageIcon icon;
 };
 
+#if defined(TEST_PRO) && defined(QT_DEBUG)
+class FunctionalityTest;
+class InstanceTest;
+#endif
+
 /*!
  * \brief Class used to show the main application window.
  */
@@ -63,7 +68,7 @@ public:
      * \param parent The QWidget parent. By default is NULL.
      */
     explicit MainWindow(QWidget *parent = 0);
-    ~MainWindow(); //! Default destructor.
+    virtual ~MainWindow(); //! Default destructor.
 
     static MainWindow *mainWindow; //! Singleton instance.
 
@@ -73,7 +78,7 @@ protected:
      * Simply ignores the event and hides the window.
      * \param event The QCloseEvent pointer.
      */
-    void closeEvent(QCloseEvent *event);
+    virtual void closeEvent(QCloseEvent *event);
 
     /*!
      * \brief Reimplemented from QMainWindow::event(QEvent). Used for transmit custom events
@@ -81,80 +86,85 @@ protected:
      * \param event The QEvent pointer.
      * \return \code true if the event has been identified or \code false in otherwise.
      */
-    bool event(QEvent *event);
+   virtual  bool event(QEvent *event);
 
-private slots:
+protected slots:
     /*!
      * \brief Adds the current connection. See HandlerManager::addConnection()
      */
-    void addConnection();
+    virtual void addConnection();
 
     /*!
      * \brief Removes the selected connection. See HandlerManager::removeConnection(QString)
      */
-    void removeConnection();
+    virtual void removeConnection();
 
     /*!
      * \brief Refresh the UI with the changed profile.
      * \param row The new row selected.
      */
-    void selectionChanged(int row);
+    virtual void selectionChanged(int row);
 
     /*!
      * \brief Refresh the proxy host in the internal settings.
      * \param text A QString with the proxy host.
      */
-    void proxyNameChanged(QString text);
+    virtual void proxyNameChanged(QString text);
 
     /*!
      * \brief Refresh the proxy port in the internal settings.
      * \param text A QString with the proxy port.
      */
-    void proxyPortChanged(QString text);
+    virtual void proxyPortChanged(QString text);
 
     /*!
      * \brief Refresh the proxy username in the internal settings.
      * \warning This only works on UNIX systems.
      * \param text A QString with the proxy username.
      */
-    void usernameChanged(QString text);
+    virtual void usernameChanged(QString text);
 
     /*!
      * \brief Refresh the proxy password in the internal settings.
      * \warning This only works on UNIX systems.
      * \param text A QString with the proxy password.
      */
-    void passwordChanged(QString text);
+    virtual void passwordChanged(QString text);
 
     /*!
      * \brief Refresh the selected profile in the system if is possible.
      * See HandlerManager::refresh(QString)
      */
-    void proxyChanged();
+    virtual void proxyChanged();
 
     /*!
      * \brief Refresh the proxy settings in the internal settings and UI.
      * This also will refresh the system proxy by calling MainWindow::proxyChanged()
      * \param enable
      */
-    void enableProxy(bool enable);
+    virtual void enableProxy(bool enable);
 
     /*!
      * \brief Performs an action depending of the possible activation reason.
      * \param reason The activation reason.
      */
-    void trayActivation(QSystemTrayIcon::ActivationReason reason);
+    virtual void trayActivation(QSystemTrayIcon::ActivationReason reason);
 
     /*!
      * \brief Shows an information message of the current network system status.
      */
-    void showMessage();
+    virtual void showMessage();
 
 private: // Private members
     Ui::MainWindow *ui;
     QSystemTrayIcon *tray;
     QTimer timer;
     QString last;
+
+#if defined(TEST_PRO) && defined(QT_DEBUG)
+    friend class FunctionalityTest;
+    friend class InstanceTest;
+#endif
 };
 
 #endif // MAINWINDOW_H

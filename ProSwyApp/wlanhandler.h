@@ -5,6 +5,7 @@
 #include <QList>
 #include <QEvent>
 #include <QVariant>
+#include <QMutex>
 
 class DataEvent : public QEvent
 {
@@ -28,6 +29,10 @@ private:
 };
 
 class HandlerData;
+#if defined(TEST_PRO) && defined(QT_DEBUG)
+class FunctionalityTest;
+class InstanceTest;
+#endif
 
 class HandlerManager
 {
@@ -105,6 +110,10 @@ private:
     static void notificationCallback(QString ssid);
 
     friend class HandlerData;
+#if defined(TEST_PRO) && defined(QT_DEBUG)
+    friend class FunctionalityTest;
+    friend class InstanceTest;
+#endif
 };
 
 #endif // WLANHANDLER_H

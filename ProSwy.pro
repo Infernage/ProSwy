@@ -1,5 +1,6 @@
 TEMPLATE = subdirs
 
-SUBDIRS += \
-    EventHelper \
-    ProSwyApp
+SUBDIRS += ProSwyApp \
+    Testing \
+    TestingIntegration
+CONFIG += ordered
